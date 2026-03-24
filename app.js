@@ -23,19 +23,6 @@ const port = process.env.PORT || 8000;
 app.use(cors());
 app.use(express.json());
 
-async function dbConnection() {
-    try {
-        // Remove useNewUrlParser and useUnifiedTopology - they're no longer needed
-        await mongoose.connect(process.env.mongodb_url);
-        console.log("✅ Connected to MongoDB!");
-    } catch (err) {
-        console.log("❌ MongoDB connection error:", err.message);
-    }
-}
-
-dbConnection();
-
-
 app.listen(port, () => {
     console.log(`Server is running at port ${port}`);
 });
