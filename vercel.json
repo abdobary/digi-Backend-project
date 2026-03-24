@@ -13,7 +13,7 @@
     }
   ],
   "env": {
-    "MONGODB_URL": "@mongodb_url",
+    "MONGODB_URL": "mongodb+srv://abdobary100_db_user:LGuP5yG5r8lTwgDx@cluster0.wpz2wzi.mongodb.net/DigiDatabase",
     "JWT_SECRET": "@jwt_secret",
     "PORT": "8000"
   }
