@@ -4,30 +4,31 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const app = express();
 
+// CORS - Allow all origins for development (fixes localhost issues)
 app.use(cors({
-  origin: true,
-  credentials: true
+  origin: true, // This allows ANY origin to access your API
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Database connection - FIXED: Use uppercase MONGODB_URL
+// Database connection
 async function dbConnection() {
     try {
-        // Check if the connection string exists
         const mongoUrl = process.env.MONGODB_URL || process.env.mongodb_url;
         if (!mongoUrl) {
             throw new Error("MONGODB_URL environment variable is not set");
         }
+        
+        console.log("Connecting to MongoDB...");
         await mongoose.connect(mongoUrl);
         console.log("✅ Connected to MongoDB!");
     } catch (err) {
         console.log("❌ MongoDB connection error:", err.message);
-        // Don't exit in production, just log the error
-        if (process.env.NODE_ENV !== 'production') {
-            process.exit(1);
-        }
     }
 }
 dbConnection();
@@ -46,7 +47,7 @@ app.get("/", (req, res) => {
   res.json({ message: "API is running", status: "ok" });
 });
 
-// Test endpoint to check if API is working
+// Test endpoint
 app.get("/api/test", (req, res) => {
   res.json({ message: "API is working!", timestamp: new Date().toISOString() });
 });
@@ -61,12 +62,11 @@ app.use((err, req, res, next) => {
   console.error("Error:", err);
   res.status(500).json({ 
     message: "Internal server error", 
-    error: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    error: err.message
   });
 });
 
-// For Vercel serverless deployment
+// Export for Vercel
 module.exports = app;
 
 // For local development
