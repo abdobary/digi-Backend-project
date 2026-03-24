@@ -2,71 +2,84 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// Database connection - with fallback
+// Cache MongoDB connection for serverless environment
+let cached = global.mongoose;
+if (!cached) {
+    cached = global.mongoose = { conn: null, promise: null };
+}
+
 async function dbConnection() {
-    try {
-        const mongoUrl = process.env.MONGODB_URL || process.env.MONGODB_URI || process.env.mongodb_url;
+    if (cached.conn) {
+        return cached.conn;
+    }
+
+    if (!cached.promise) {
+        const mongoUrl = process.env.mongodb_url;
+        
         if (!mongoUrl) {
-            throw new Error("MongoDB URL not set");
+            console.error("❌ mongodb_url is not defined in environment variables");
+            throw new Error("MongoDB URL is not defined");
         }
-        await mongoose.connect(mongoUrl);
-        console.log("✅ Connected to MongoDB!");
+
+        console.log("🔄 Connecting to MongoDB...");
+        cached.promise = mongoose.connect(mongoUrl, {
+            maxPoolSize: 10,
+            serverSelectionTimeoutMS: 5000,
+            socketTimeoutMS: 45000,
+        }).then((mongoose) => {
+            console.log("✅ Connected to MongoDB!");
+            return mongoose;
+        }).catch((err) => {
+            console.error("❌ MongoDB connection error:", err.message);
+            cached.promise = null;
+            throw err;
+        });
+    }
+    
+    cached.conn = await cached.promise;
+    return cached.conn;
+}
+
+// Middleware to ensure DB is connected before handling requests
+app.use(async (req, res, next) => {
+    try {
+        await dbConnection();
+        next();
     } catch (err) {
-        console.log("❌ MongoDB connection error:", err.message);
+        console.error("Database connection failed:", err.message);
+        res.status(500).json({ 
+            message: "Database connection error", 
+            error: err.message 
+        });
     }
-}
-dbConnection();
+});
 
-// Routes with error handling
-try {
-    const authRoutes = require("./Routes/authRoutes");
-    app.use("/api", authRoutes);
-    console.log("✅ Auth routes loaded");
-} catch (err) {
-    console.error("❌ Auth routes failed:", err.message);
-}
+// Routes
+const authRoutes = require("./Routes/authRoutes");
+app.use("/api", authRoutes);
 
-try {
-    const categoryRoutes = require("./Routes/CategoryRoutes");
-    app.use('/api/categories', categoryRoutes);
-    console.log("✅ Category routes loaded");
-} catch (err) {
-    console.error("❌ Category routes failed:", err.message);
+const categoryRoutes = require("./Routes/CategoryRoutes");
+app.use('/api/categories', categoryRoutes);
+
+const productRoutes = require("./Routes/ProductsRoutes");
+app.use('/api/products', productRoutes);
+
+// User controller
+const { userCont } = require("./Controllers/UserController");
+if (typeof userCont === 'function') {
+    userCont(app);
 }
 
-try {
-    const productRoutes = require("./Routes/ProductsRoutes");
-    app.use('/api/products', productRoutes);
-    console.log("✅ Product routes loaded");
-} catch (err) {
-    console.error("❌ Product routes failed:", err.message);
-}
-
-// User controller with error handling
-try {
-    const { userCont } = require("./Controllers/UserController");
-    if (typeof userCont === 'function') {
-        userCont(app);
-    }
-    console.log("✅ User controller loaded");
-} catch (err) {
-    console.error("❌ User controller failed:", err.message);
-}
-
-// Error handler with error handling
-try {
-    const { errorhandler } = require("./middleware/ErrorHandlerMiddleware");
-    if (typeof errorhandler === 'function') {
-        app.use(errorhandler);
-    }
-    console.log("✅ Error handler loaded");
-} catch (err) {
-    console.error("❌ Error handler failed:", err.message);
+// Error handler
+const { errorhandler } = require("./middleware/ErrorHandlerMiddleware");
+if (typeof errorhandler === 'function') {
+    app.use(errorhandler);
 }
 
 // Basic health check
@@ -79,7 +92,7 @@ app.use((req, res) => {
     res.status(404).json({ message: "Route not found", path: req.path });
 });
 
-// Export for Vercel - REQUIRED
+// Export for Vercel
 module.exports = app;
 
 // Only listen locally
