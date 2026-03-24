@@ -2,76 +2,124 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const { errorhandler } = require("./middleware/ErrorHandlerMiddleware");
-const { userCont } = require("./Controllers/UserController");
 const app = express();
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// CORS - Allow your local frontend
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:5174', 
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3000'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-// Database connection - FIXED: Use uppercase MONGODB_URL
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Database connection
 async function dbConnection() {
     try {
         const mongoUrl = process.env.MONGODB_URL || process.env.mongodb_url;
         if (!mongoUrl) {
-            throw new Error("MONGODB_URL not set");
+            console.error("MONGODB_URL environment variable is not set");
+            return;
         }
         await mongoose.connect(mongoUrl);
         console.log("✅ Connected to MongoDB!");
     } catch (err) {
-        console.log("❌ MongoDB connection error:", err.message);
+        console.error("❌ MongoDB connection error:", err.message);
     }
 }
 dbConnection();
 
-// Routes with error handling - prevents crashing if files missing
+// Routes with error handling
+let authRoutes, productRoutes, categoryRoutes;
+
 try {
-    const authRoutes = require("./Routes/authRoutes");
-    app.use("/api", authRoutes);
+  authRoutes = require("./routes/authRoutes");
+  console.log("✅ Auth routes loaded");
 } catch (err) {
-    console.error("❌ Failed to load authRoutes:", err.message);
+  console.error("❌ Failed to load authRoutes:", err.message);
+  authRoutes = express.Router();
+  authRoutes.get("/auth-status", (req, res) => {
+    res.json({ error: "Auth routes failed to load", details: err.message });
+  });
 }
 
 try {
-    const categoryRoutes = require("./Routes/CategoryRoutes");
-    app.use('/api/categories', categoryRoutes);
+  productRoutes = require("./routes/ProductsRoutes");
+  console.log("✅ Product routes loaded");
 } catch (err) {
-    console.error("❌ Failed to load categoryRoutes:", err.message);
+  console.error("❌ Failed to load productRoutes:", err.message);
+  productRoutes = express.Router();
 }
 
 try {
-    const productRoutes = require("./Routes/ProductsRoutes");
-    app.use('/api/products', productRoutes);
+  categoryRoutes = require("./routes/CategoryRoutes");
+  console.log("✅ Category routes loaded");
 } catch (err) {
-    console.error("❌ Failed to load productRoutes:", err.message);
+  console.error("❌ Failed to load categoryRoutes:", err.message);
+  categoryRoutes = express.Router();
 }
 
-// User controller - only if it exists
-try {
-    if (typeof userCont === 'function') {
-        userCont(app);
+// Mount routes
+app.use("/api", authRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/categories", categoryRoutes);
+
+// Health check endpoints
+app.get("/", (req, res) => {
+  res.json({ message: "API is running", status: "ok", timestamp: new Date().toISOString() });
+});
+
+app.get("/api/test", (req, res) => {
+  res.json({ message: "API is working!", timestamp: new Date().toISOString() });
+});
+
+// Debug endpoint
+app.get("/debug", (req, res) => {
+  res.json({
+    status: "App running",
+    mongodb_url_set: !!(process.env.MONGODB_URL || process.env.mongodb_url),
+    jwt_secret_set: !!process.env.JWT_SECRET,
+    routes_loaded: {
+      auth: !!authRoutes,
+      products: !!productRoutes,
+      categories: !!categoryRoutes
     }
-} catch (err) {
-    console.error("❌ Failed to load userCont:", err.message);
-}
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ 
+    message: "Route not found",
+    path: req.path 
+  });
+});
 
 // Error handler
-try {
-    if (typeof errorhandler === 'function') {
-        app.use(errorhandler);
-    }
-} catch (err) {
-    console.error("❌ Failed to load errorhandler:", err.message);
-}
+app.use((err, req, res, next) => {
+  console.error("Error:", err);
+  res.status(500).json({ 
+    message: "Internal server error", 
+    error: err.message 
+  });
+});
 
-// Export for Vercel (REQUIRED)
+// Export for Vercel
 module.exports = app;
 
-// For local development ONLY
+// For local development
 if (process.env.NODE_ENV !== 'production' && require.main === module) {
-    const port = process.env.PORT || 8000;
-    app.listen(port, () => {
-        console.log(`Server is running at port ${port}`);
-    });
+  const port = process.env.PORT || 8000;
+  app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+    console.log(`Frontend should be at: http://localhost:5173`);
+  });
 }
