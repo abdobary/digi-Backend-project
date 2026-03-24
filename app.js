@@ -4,15 +4,11 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const app = express();
 
-// Middleware
 app.use(cors({
-  origin: [
-    'http://localhost:5173', 
-    'http://localhost:3000',
-    'https://digi-backend-project.vercel.app',
-  ],
+  origin: true,
   credentials: true
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
