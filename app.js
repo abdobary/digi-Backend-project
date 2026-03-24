@@ -16,7 +16,7 @@ app.use(express.urlencoded({ extended: true }));
 // Database connection
 async function dbConnection() {
     try {
-        await mongoose.connect(process.env.MONGODB_URI);
+        await mongoose.connect(process.env.mongodb_url);
         console.log("✅ Connected to MongoDB!");
     } catch (err) {
         console.log("❌ MongoDB connection error:", err.message);
