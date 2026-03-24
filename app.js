@@ -26,7 +26,7 @@ app.use(express.json());
 async function dbConnection() {
     try {
         // Remove useNewUrlParser and useUnifiedTopology - they're no longer needed
-        await mongoose.connect(process.env.MONGODB_URI);
+        await mongoose.connect(process.env.mongodb_url);
         console.log("✅ Connected to MongoDB!");
     } catch (err) {
         console.log("❌ MongoDB connection error:", err.message);
