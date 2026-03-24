@@ -6,6 +6,16 @@ This is the backend of a full-stack e-commerce application. It provides RESTful 
 
 ---
 
+## 🔗 Frontend Repository
+
+The frontend for this project is available here:
+
+👉 https://github.com/abdobary/digi-Frontend-project
+
+This frontend consumes the backend APIs and provides the full user interface for the application.
+
+---
+
 ## 🚀 Features
 
 * 🔐 User Authentication (Register & Login)
