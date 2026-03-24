@@ -35,18 +35,6 @@ async function dbConnection() {
 
 dbConnection();
 
-const authRoutes = require("./Routes/authRoutes");
-app.use("/api", authRoutes);
-
-const categoryRoutes = require("./Routes/CategoryRoutes");
-app.use('/api/categories', categoryRoutes);
-
-const productRoutes = require("./Routes/ProductsRoutes");
-app.use('/api/products', productRoutes);
-
-userCont(app);
-
-app.use(errorhandler); 
 
 app.listen(port, () => {
     console.log(`Server is running at port ${port}`);
