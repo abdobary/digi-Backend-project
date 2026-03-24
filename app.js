@@ -1,125 +1,53 @@
+/*
+express – Web framework for building API routes and handling HTTP requests – npm install express
+mongoose – Object Document Mapper(ODM) library for MongoDB providing schema validation and database operations – npm install mongoose
+cors – Enables Cross-Origin Resource Sharing so React app can communicate with Node server – npm install cors
+dotenv – Loads environment variables from a .env file into process.env to keep sensitive data secure – npm install dotenv
+nodemon – Automatically restarts the server when file changes are detected to speed up development – npm install --save-dev nodemon
+bcryptjs – For hashing passwords when implementing user authentication – npm install bcryptjs
+jsonwebtoken – For creating and verifying JWT tokens for authentication – npm install jsonwebtoken
+express-validator – Provides middleware for validating and sanitizing incoming request data – npm install express-validato
+morgan – HTTP request logger middleware useful for debugging – npm install morgan
+
+npm install express mongoose cors dotenv bcryptjs jsonwebtoken express-validator morgan
+*/
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const { errorhandler } = require("./middleware/ErrorHandlerMiddleware");
+const {userCont} = require("./Controllers/UserController")
 const app = express();
+const port = process.env.PORT || 8000;
 
-// CORS - Allow your local frontend
-app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:5174', 
-    'http://localhost:3000',
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:3000'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Database connection
 async function dbConnection() {
     try {
-        const mongoUrl = process.env.MONGODB_URL || process.env.mongodb_url;
-        if (!mongoUrl) {
-            console.error("MONGODB_URL environment variable is not set");
-            return;
-        }
-        await mongoose.connect(mongoUrl);
+        // Remove useNewUrlParser and useUnifiedTopology - they're no longer needed
+        await mongoose.connect(process.env.MONGODB_URI);
         console.log("✅ Connected to MongoDB!");
     } catch (err) {
-        console.error("❌ MongoDB connection error:", err.message);
+        console.log("❌ MongoDB connection error:", err.message);
     }
 }
+
 dbConnection();
 
-// Routes with error handling
-let authRoutes, productRoutes, categoryRoutes;
-
-try {
-  authRoutes = require("./routes/authRoutes");
-  console.log("✅ Auth routes loaded");
-} catch (err) {
-  console.error("❌ Failed to load authRoutes:", err.message);
-  authRoutes = express.Router();
-  authRoutes.get("/auth-status", (req, res) => {
-    res.json({ error: "Auth routes failed to load", details: err.message });
-  });
-}
-
-try {
-  productRoutes = require("./routes/ProductsRoutes");
-  console.log("✅ Product routes loaded");
-} catch (err) {
-  console.error("❌ Failed to load productRoutes:", err.message);
-  productRoutes = express.Router();
-}
-
-try {
-  categoryRoutes = require("./routes/CategoryRoutes");
-  console.log("✅ Category routes loaded");
-} catch (err) {
-  console.error("❌ Failed to load categoryRoutes:", err.message);
-  categoryRoutes = express.Router();
-}
-
-// Mount routes
+const authRoutes = require("./Routes/authRoutes");
 app.use("/api", authRoutes);
-app.use("/api/products", productRoutes);
-app.use("/api/categories", categoryRoutes);
 
-// Health check endpoints
-app.get("/", (req, res) => {
-  res.json({ message: "API is running", status: "ok", timestamp: new Date().toISOString() });
+const categoryRoutes = require("./Routes/CategoryRoutes");
+app.use('/api/categories', categoryRoutes);
+
+const productRoutes = require("./Routes/ProductsRoutes");
+app.use('/api/products', productRoutes);
+
+userCont(app);
+
+app.use(errorhandler); 
+
+app.listen(port, () => {
+    console.log(`Server is running at port ${port}`);
 });
-
-app.get("/api/test", (req, res) => {
-  res.json({ message: "API is working!", timestamp: new Date().toISOString() });
-});
-
-// Debug endpoint
-app.get("/debug", (req, res) => {
-  res.json({
-    status: "App running",
-    mongodb_url_set: !!(process.env.MONGODB_URL || process.env.mongodb_url),
-    jwt_secret_set: !!process.env.JWT_SECRET,
-    routes_loaded: {
-      auth: !!authRoutes,
-      products: !!productRoutes,
-      categories: !!categoryRoutes
-    }
-  });
-});
-
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ 
-    message: "Route not found",
-    path: req.path 
-  });
-});
-
-// Error handler
-app.use((err, req, res, next) => {
-  console.error("Error:", err);
-  res.status(500).json({ 
-    message: "Internal server error", 
-    error: err.message 
-  });
-});
-
-// Export for Vercel
-module.exports = app;
-
-// For local development
-if (process.env.NODE_ENV !== 'production' && require.main === module) {
-  const port = process.env.PORT || 8000;
-  app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-    console.log(`Frontend should be at: http://localhost:5173`);
-  });
-}
