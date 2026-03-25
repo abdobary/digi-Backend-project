@@ -1,8 +1,9 @@
 const Product = require("../models/Products");
+const mongoose = require("mongoose");
 
 const createProduct = async (req, res) => {
     try {
-        const { name, price } = req.body;
+        const { name, description, price, image } = req.body;
         
         // Validate required fields
         if (!name) {
@@ -12,9 +13,16 @@ const createProduct = async (req, res) => {
             return res.status(400).json({ message: "Product price is required" });
         }
         
+        // Ensure user exists in request
+        if (!req.user || !req.user._id) {
+            return res.status(401).json({ message: "User not authenticated" });
+        }
+        
         const product = new Product({
             name,
+            description: description || "",
             price,
+            image: image || "",
             createdBy: req.user._id
         });
         
@@ -23,9 +31,17 @@ const createProduct = async (req, res) => {
         // Populate references for response
         await product.populate('createdBy', 'username email');
         
-        res.status(201).json(product);
+        res.status(201).json({
+            success: true,
+            message: "Product created successfully",
+            product
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error in createProduct:", error);
+        res.status(500).json({ 
+            success: false,
+            message: error.message 
+        });
     }
 };
 
@@ -54,86 +70,215 @@ const getProducts = async (req, res) => {
             .populate('createdBy', 'username email')
             .sort({ createdAt: -1 });
         
-        res.status(200).json(products);
+        res.status(200).json({
+            success: true,
+            count: products.length,
+            products
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error in getProducts:", error);
+        res.status(500).json({ 
+            success: false,
+            message: error.message 
+        });
     }
 };
 
 const getProductById = async (req, res) => {
     try {
-        const product = await Product.findById(req.params.id)
+        const { id } = req.params;
+        
+        // Validate ObjectId
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Invalid product ID" 
+            });
+        }
+        
+        const product = await Product.findById(id)
             .populate('createdBy', 'username email');
         
         if (!product) {
-            return res.status(404).json({ message: "Product not found" });
+            return res.status(404).json({ 
+                success: false,
+                message: "Product not found" 
+            });
         }
         
-        res.status(200).json(product);
+        res.status(200).json({
+            success: true,
+            product
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error in getProductById:", error);
+        res.status(500).json({ 
+            success: false,
+            message: error.message 
+        });
     }
 };
 
 const updateProduct = async (req, res) => {
     try {
+        const { id } = req.params;
         const { name, description, price, image } = req.body;
         
-        const product = await Product.findById(req.params.id);
+        // Validate ObjectId
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Invalid product ID" 
+            });
+        }
+        
+        const product = await Product.findById(id);
         
         if (!product) {
-            return res.status(404).json({ message: "Product not found" });
+            return res.status(404).json({ 
+                success: false,
+                message: "Product not found" 
+            });
         }
         
         // Check if user is admin or product creator
-        if (req.user.role !== 'admin' && product.createdBy.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ message: "Not authorized to update this product" });
+        const isAdmin = req.user.role === 'admin';
+        const isCreator = product.createdBy.equals(req.user._id);
+        
+        if (!isAdmin && !isCreator) {
+            return res.status(403).json({ 
+                success: false,
+                message: "Not authorized to update this product",
+                details: {
+                    userRole: req.user.role,
+                    userId: req.user._id,
+                    productCreatorId: product.createdBy
+                }
+            });
         }
         
-        product.name = name || product.name;
-        product.description = description !== undefined ? description : product.description;
-        product.price = price !== undefined ? price : product.price;
-        product.image = image !== undefined ? image : product.image;
+        // Update fields
+        if (name) product.name = name;
+        if (description !== undefined) product.description = description;
+        if (price !== undefined) product.price = price;
+        if (image !== undefined) product.image = image;
         
         await product.save();
-        
         await product.populate('createdBy', 'username email');
         
-        res.status(200).json(product);
+        res.status(200).json({
+            success: true,
+            message: "Product updated successfully",
+            product
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error in updateProduct:", error);
+        res.status(500).json({ 
+            success: false,
+            message: error.message 
+        });
     }
 };
 
 const deleteProduct = async (req, res) => {
     try {
-        const product = await Product.findById(req.params.id);
+        const { id } = req.params;
+        
+        // Validate ObjectId
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Invalid product ID" 
+            });
+        }
+        
+        const product = await Product.findById(id);
         
         if (!product) {
-            return res.status(404).json({ message: "Product not found" });
+            return res.status(404).json({ 
+                success: false,
+                message: "Product not found" 
+            });
         }
         
         // Check if user is admin or product creator
-        if (req.user.role !== 'admin' && product.createdBy.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ message: "Not authorized to delete this product" });
+        const isAdmin = req.user.role === 'admin';
+        const isCreator = product.createdBy.equals(req.user._id);
+        
+        if (!isAdmin && !isCreator) {
+            return res.status(403).json({ 
+                success: false,
+                message: "Not authorized to delete this product",
+                details: {
+                    userRole: req.user.role,
+                    userId: req.user._id,
+                    productCreatorId: product.createdBy
+                }
+            });
         }
         
         await product.deleteOne();
-        res.status(200).json({ message: "Product deleted successfully" });
+        
+        res.status(200).json({
+            success: true,
+            message: "Product deleted successfully"
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error in deleteProduct:", error);
+        res.status(500).json({ 
+            success: false,
+            message: error.message 
+        });
     }
 };
 
 const getProductsByUser = async (req, res) => {
     try {
-        const products = await Product.find({ createdBy: req.params.userId })
+        const { userId } = req.params;
+        
+        // Validate ObjectId
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Invalid user ID" 
+            });
+        }
+        
+        const products = await Product.find({ createdBy: userId })
             .populate('createdBy', 'username email')
             .sort({ createdAt: -1 });
         
-        res.status(200).json(products);
+        res.status(200).json({
+            success: true,
+            count: products.length,
+            products
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error in getProductsByUser:", error);
+        res.status(500).json({ 
+            success: false,
+            message: error.message 
+        });
+    }
+};
+
+const getMyProducts = async (req, res) => {
+    try {
+        const products = await Product.find({ createdBy: req.user._id })
+            .populate('createdBy', 'username email')
+            .sort({ createdAt: -1 });
+        
+        res.status(200).json({
+            success: true,
+            count: products.length,
+            products
+        });
+    } catch (error) {
+        console.error("Error in getMyProducts:", error);
+        res.status(500).json({ 
+            success: false,
+            message: error.message 
+        });
     }
 };
 
@@ -143,5 +288,6 @@ module.exports = {
     getProductById,
     updateProduct,
     deleteProduct,
-    getProductsByUser
+    getProductsByUser,
+    getMyProducts
 };
